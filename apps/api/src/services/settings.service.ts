@@ -6,6 +6,7 @@ const tools = z.object({ tiktok: z.boolean(), instagram: z.boolean(), facebook: 
 /** Formats de bannière Adsterra (largeur x hauteur) acceptés. */
 export const BANNER_SIZES = ['300x250', '728x90', '468x60', '320x50', '160x600', '160x300'] as const;
 const HOST = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/;
+const SCRIPT_PATH = /^[A-Za-z0-9][A-Za-z0-9/_.-]{0,119}$/;
 const ads = z.object({
   enabled: z.boolean(), waitSeconds: z.number().int().min(0).max(30), homeSlotEnabled: z.boolean(),
   /** Réseau publicitaire. `none` = décompte seul, sans bannière. */
@@ -14,6 +15,8 @@ const ads = z.object({
   bannerKey: z.string().trim().toLowerCase().regex(/^[a-f0-9]{32}$/, 'Clé de bannière invalide (32 caractères hexadécimaux)').or(z.literal('')),
   /** Domaine qui sert invoke.js (celui du code Adsterra), sans https ni chemin. */
   bannerHost: z.string().trim().toLowerCase().regex(HOST, 'Domaine invalide (exemple : www.exemple.com)').or(z.literal('')),
+  /** Chemin du script quand Adsterra n'utilise pas « <clé>/invoke.js » (ex. « 22/41a0… »). Vide = « <clé>/invoke.js ». */
+  scriptPath: z.string().trim().regex(SCRIPT_PATH, 'Chemin de script invalide').refine((v) => !v.includes('..') && !v.includes('//'), 'Chemin de script invalide').or(z.literal('')),
   bannerSize: z.enum(BANNER_SIZES),
 }).strict();
 export const settingsShape = { tools, ads };
@@ -22,7 +25,7 @@ export type Settings = { tools: z.infer<typeof tools>; ads: z.infer<typeof ads> 
 export const DEFAULT_SETTINGS: Settings = {
   tools: { tiktok: true, instagram: true, facebook: true, music: true },
   // Ads are OFF until an administrator turns them on.
-  ads: { enabled: false, waitSeconds: 5, homeSlotEnabled: false, provider: 'none', bannerKey: '', bannerHost: '', bannerSize: '300x250' },
+  ads: { enabled: false, waitSeconds: 5, homeSlotEnabled: false, provider: 'none', bannerKey: '', bannerHost: '', scriptPath: '', bannerSize: '300x250' },
 };
 
 export const settingsPatchSchema = z.object({ tools: tools.partial().optional(), ads: ads.partial().optional() }).strict()
@@ -34,12 +37,12 @@ function assertAdsConsistent(a: z.infer<typeof ads>) {
   if (a.homeSlotEnabled && a.provider === 'none') throw badRequest('The home slot needs an ad provider.', { homeSlotEnabled: ['Choose a provider first'] });
 }
 
-export type AdSlot = { provider: 'adsterra'; key: string; host: string; width: number; height: number };
+export type AdSlot = { provider: 'adsterra'; key: string; host: string; width: number; height: number; path?: string };
 /** Emplacement publicitaire prêt à afficher, ou null (pas de réseau, ou configuration incomplète). */
 export function adSlot(a: z.infer<typeof ads>): AdSlot | null {
   if (a.provider !== 'adsterra' || !a.bannerKey || !a.bannerHost) return null;
   const [w, h] = a.bannerSize.split('x').map(Number) as [number, number];
-  return { provider: 'adsterra', key: a.bannerKey, host: a.bannerHost, width: w, height: h };
+  return { provider: 'adsterra', key: a.bannerKey, host: a.bannerHost, width: w, height: h, ...(a.scriptPath ? { path: a.scriptPath } : {}) };
 }
 
 export function createSettingsService(repos: Repos, now: () => Date = () => new Date()) {
@@ -79,3 +82,4 @@ export function createSettingsService(repos: Repos, now: () => Date = () => new 
   };
 }
 export type SettingsService = ReturnType<typeof createSettingsService>;
+  
