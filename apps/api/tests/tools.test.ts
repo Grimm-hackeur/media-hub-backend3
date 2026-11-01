@@ -364,6 +364,14 @@ describe('Adsterra : réglages et emplacement publicitaire', () => {
     expect((await admin.call('get', '/api/v1/admin/settings')).body.ads.provider).toBe('none');
   });
 
+  it('accepte le nouveau format Adsterra (chemin de script sans invoke.js) et refuse les chemins dangereux', async () => {
+    const { ctx } = setup(); const admin = await signedInAdmin(ctx, 'boss');
+    for (const bad of ['../x', 'a//b', '/abs', 'a b', 'a"><script>', 'x?y=1']) expect((await patch(admin, { scriptPath: bad })).status, bad).toBe(400);
+    expect((await patch(admin, { provider: 'adsterra', bannerKey: KEY, bannerHost: HOSTNAME, scriptPath: '22/41a030d6fde208eb9abd2e62d965bdaa', enabled: true })).status).toBe(200);
+    const pub = await request(ctx.app).get('/api/v1/settings/public');
+    expect(pub.body.ads.slot).toEqual({ provider: 'adsterra', key: KEY, host: HOSTNAME, width: 300, height: 250, path: '22/41a030d6fde208eb9abd2e62d965bdaa' });
+  });
+
   it('expose l’emplacement (clé, domaine, taille) seulement quand tout est complet et activé', async () => {
     const { ctx } = setup(); const admin = await signedInAdmin(ctx, 'boss');
     expect((await patch(admin, { provider: 'adsterra', bannerKey: KEY.toUpperCase(), bannerHost: 'WWW.Exemple-Pub.com', bannerSize: '728x90' })).status).toBe(200);
@@ -392,3 +400,4 @@ describe('Adsterra : réglages et emplacement publicitaire', () => {
     expect((await request(ctx.app).get('/api/v1/settings/public')).body.ads.slot).toBeNull();
   });
 });
+      
