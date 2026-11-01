@@ -1,0 +1,21 @@
+{
+  "name": "media-hub",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "api:dev": "npm run dev -w apps/api",
+    "api:build": "npm run build -w apps/api",
+    "api:test": "npm run test -w apps/api",
+    "api:typecheck": "npm run typecheck -w apps/api",
+    "web:dev": "npm run dev -w apps/web",
+    "web:build": "npm run build -w apps/web",
+    "web:test": "npm run test -w apps/web",
+    "web:typecheck": "npm run typecheck -w apps/web"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}
