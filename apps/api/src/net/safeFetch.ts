@@ -122,3 +122,44 @@ export class Limiter {
   }
   get inFlight() { return this.active; }
 }
+
+export interface StreamOptions { maxRedirects?: number; timeoutMs?: number; fetchImpl?: SafeFetchOptions['fetchImpl']; resolve?: SafeFetchOptions['resolve']; headers?: Record<string, string> }
+export interface OpenStream { status: number; headers: Headers; body: ReadableStream<Uint8Array> | null; finalUrl: string; abort(): void }
+export type StreamOpener = (url: string, opts?: StreamOptions) => Promise<OpenStream>;
+
+/**
+ * Opens a remote file for STREAMING (no buffering). Same protections as safeFetch: https only, public addresses only,
+ * redirects followed manually and re-validated. The body is NOT read here; the caller must consume or abort it.
+ */
+export const openStream: StreamOpener = async (rawUrl, opts = {}) => {
+  const { maxRedirects = 3, timeoutMs = 300_000 } = opts;
+  const doFetch = opts.fetchImpl ?? defaultFetch;
+  const resolve = opts.resolve ?? resolvePublic;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  timer.unref?.();
+  let current = rawUrl;
+  try {
+    for (let hop = 0; ; hop++) {
+      const u = validateExternalUrl(current);
+      await resolve(u.hostname);
+      const res = await doFetch(u.toString(), { method: 'GET', headers: { Accept: '*/*', ...opts.headers }, redirect: 'manual', signal: ctrl.signal });
+      if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+        await res.body?.cancel().catch(() => {});
+        if (hop >= maxRedirects) throw new SafeFetchError('TOO_MANY_REDIRECTS', 'Too many redirects');
+        current = new URL(res.headers.get('location')!, u).toString();
+        continue;
+      }
+      return { status: res.status, headers: res.headers, body: res.body, finalUrl: u.toString(), abort: () => { clearTimeout(timer); ctrl.abort(); } };
+    }
+  } catch (e) {
+    clearTimeout(timer);
+    if (e instanceof SafeFetchError) throw e;
+    if (e instanceof SsrfError) throw new SafeFetchError(e.code, e.message);
+    if (ctrl.signal.aborted) throw new SafeFetchError('TIMEOUT', 'The remote service did not answer in time');
+    const cause = (e as { cause?: unknown })?.cause;
+    if (cause instanceof SsrfError) throw new SafeFetchError(cause.code, cause.message);
+    throw new SafeFetchError('NETWORK', 'Network error while contacting the remote service');
+  }
+};
+      
