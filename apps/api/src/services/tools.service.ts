@@ -112,6 +112,14 @@ export function createToolsService(deps: ToolsDeps) {
       return { title: result.title, downloads: result.downloads, expiresAt: job.expiresAt.toISOString() };
     },
 
+    /** Same rules as claim() (wait over, owner, not expired), but returns one file to be streamed through the server. */
+    async fileFor(jobId: string, index: number, user: UserRecord | null) {
+      const c = await this.claim(jobId, user);
+      const d = c.downloads[index];
+      if (!d) throw notFound('This file does not exist.');
+      return { title: c.title, file: d };
+    },
+
     async search(input: z.infer<typeof searchSchema>, user: UserRecord | null) {
       const { music } = deps;
       await ensureAvailable('music', music.configured, music.notConfiguredReason);
@@ -141,3 +149,4 @@ export function createToolsService(deps: ToolsDeps) {
 }
 export type ToolsService = ReturnType<typeof createToolsService>;
 export type { MediaToolId };
+                      
