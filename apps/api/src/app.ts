@@ -11,6 +11,7 @@ import { createInstagramProvider, createTikTokProvider, createWhiteShadowFaceboo
 import { ProviderHealth } from './providers/health.js';
 import { createMusicProvider } from './providers/music.js';
 import type { MediaProvider, MusicProvider } from './providers/types.js';
+import type { StreamOpener } from './net/safeFetch.js';
 import type { Repos } from './repositories/types.js';
 import { adminRouter } from './routes/admin.js';
 import { authRouter } from './routes/auth.js';
@@ -37,7 +38,7 @@ export interface AppDeps {
   env: Env; repos: Repos; hasher: PasswordHasher; email: EmailProvider;
   logger?: Logger; limits?: Limits; checkDb?: () => Promise<boolean>; isShuttingDown?: () => boolean; now?: () => Date;
   /** Overridable in tests; by default built from the environment. */
-  media?: MediaProvider[]; music?: MusicProvider; google?: GoogleClient; aiProvider?: AiProvider;
+  media?: MediaProvider[]; music?: MusicProvider; mediaStream?: StreamOpener; google?: GoogleClient; aiProvider?: AiProvider;
 }
 
 export function createApp(deps: AppDeps): Express {
@@ -91,7 +92,7 @@ export function createApp(deps: AppDeps): Express {
   web.use('/auth', authRouter(env, auth, lim));
   web.use('/keys', keysRouter(keys));
   web.use('/me', meRouter(me));
-  web.use('/tools', toolsRouter(tools, lim, env.TOOLS_REQUIRE_LOGIN));
+  web.use('/tools', toolsRouter(tools, lim, env.TOOLS_REQUIRE_LOGIN, deps.mediaStream));
   web.use('/reports', reportsRouter(reports, lim));
   web.use('/settings', settingsRouter(settings));
   web.use('/ai', aiRouter(ai, lim));
